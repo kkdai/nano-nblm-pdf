@@ -189,7 +189,7 @@ def main():
 
         col1, col2 = st.columns([1, 4])
         with col1:
-            process_button = st.button("🚀 開始處理", type="primary", use_container_width=True)
+            process_button = st.button("🚀 開始處理", type="primary", width='stretch')
 
         if process_button:
             if not api_key:
@@ -254,10 +254,10 @@ def main():
                     col1, col2 = st.columns(2)
                     with col1:
                         st.write("原始圖片")
-                        st.image(images[0], use_container_width=True)
+                        st.image(images[0], width='stretch')
                     with col2:
                         st.write("優化後")
-                        st.image(optimized_images[0], use_container_width=True)
+                        st.image(optimized_images[0], width='stretch')
 
                 status_2.update(label="✅ 圖片優化完成", state="complete")
 
@@ -292,7 +292,7 @@ def main():
                     file_name=f"optimized_{uploaded_file.name}",
                     mime="application/pdf",
                     type="primary",
-                    use_container_width=True
+                    width='stretch'
                 )
 
                 st.success("🎉 所有處理已完成！")
