@@ -2,6 +2,9 @@
 
 使用 Gemini AI 優化 PDF 檔案中的文字品質，提升清晰度和可讀性。
 
+<img width="1906" height="695" alt="image" src="https://github.com/user-attachments/assets/fb24d906-ef02-4f31-ac82-7cca0f653225" />
+
+
 ## 功能特點
 
 - 📄 上傳 PDF 檔案
