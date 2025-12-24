@@ -20,10 +20,14 @@ st.set_page_config(
 def convert_pdf_to_images(pdf_path, dpi=300):
     """Convert PDF to high-resolution images"""
     try:
+        st.write(f"開始轉換 PDF，DPI={dpi}")
         images = convert_from_path(pdf_path, dpi=dpi)
+        st.write(f"成功轉換 {len(images)} 頁")
         return images
     except Exception as e:
         st.error(f"Error converting PDF to images: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
         return None
 
 def image_to_base64(image):
@@ -33,30 +37,35 @@ def image_to_base64(image):
     img_bytes = buffered.getvalue()
     return base64.b64encode(img_bytes).decode()
 
-def optimize_image_with_gemini(image, api_key):
+def optimize_image_with_gemini(image, api_key, aspect_ratio="16:9"):
     """Use Gemini API to optimize text in image"""
     try:
+        st.write(f"  → 初始化 Gemini 客戶端...")
         client = genai.Client(
             vertexai=True,
             api_key=api_key,
         )
 
         # Convert image to base64
+        st.write(f"  → 轉換圖片格式...")
         img_base64 = image_to_base64(image)
 
         model = "gemini-3-pro-image-preview"
+        st.write(f"  → 使用模型: {model}")
 
         # Create the content with the image and prompt
+        prompt_text = "請優化這張圖片中的文字，使其更清晰、更易讀。保持原有的版面配置，但提升文字的品質、對比度和清晰度。請輸出優化後的圖片。"
+
         contents = [
             types.Content(
                 role="user",
                 parts=[
-                    types.Part.from_text(
-                        "請優化這張圖片中的文字，使其更清晰、更易讀。保持原有的版面配置，但提升文字的品質、對比度和清晰度。請輸出優化後的圖片。"
-                    ),
-                    types.Part.from_bytes(
-                        data=base64.b64decode(img_base64),
-                        mime_type="image/png"
+                    types.Part(text=prompt_text),
+                    types.Part(
+                        inline_data=types.Blob(
+                            mime_type="image/png",
+                            data=base64.b64decode(img_base64)
+                        )
                     )
                 ]
             )
@@ -86,18 +95,20 @@ def optimize_image_with_gemini(image, api_key):
                 )
             ],
             image_config=types.ImageConfig(
-                aspect_ratio="1:1",
-                image_size="2K",
-                output_mime_type="image/png",
+                aspect_ratio=aspect_ratio,
+                image_size="2K"
             ),
         )
 
         # Generate optimized image
+        st.write(f"  → 呼叫 Gemini API 進行優化...")
         response = client.models.generate_content(
             model=model,
             contents=contents,
             config=generate_content_config,
         )
+
+        st.write(f"  → 收到 API 回應，解析結果...")
 
         # Extract the generated image from response
         if response.candidates and len(response.candidates) > 0:
@@ -109,14 +120,18 @@ def optimize_image_with_gemini(image, api_key):
                         image_data = part.inline_data.data
                         # Convert to PIL Image
                         optimized_image = Image.open(io.BytesIO(image_data))
+                        st.write(f"  → ✅ 成功生成優化圖片")
                         return optimized_image
 
         # If no image in response, return original
-        st.warning("Gemini API did not return an optimized image, using original")
+        st.warning(f"  → ⚠️ API 未返回優化圖片，使用原圖")
+        st.write(f"  → 回應詳情: {response}")
         return image
 
     except Exception as e:
-        st.error(f"Error optimizing image with Gemini: {str(e)}")
+        st.error(f"  → ❌ 優化失敗: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
         return image
 
 def images_to_pdf(images, output_path):
@@ -164,6 +179,13 @@ def main():
             value=300,
             step=50,
             help="更高的 DPI 會產生更清晰的圖片，但處理時間會更長"
+        )
+
+        aspect_ratio = st.selectbox(
+            "輸出比例",
+            options=["16:9", "4:3", "3:4", "9:16", "1:1"],
+            index=0,
+            help="選擇輸出圖片的長寬比例。16:9 適合投影片，3:4 適合文件"
         )
 
         st.markdown("---")
@@ -235,19 +257,35 @@ def main():
                 with status_2:
                     progress_bar = st.progress(0)
                     progress_text = st.empty()
+                    status_log = st.empty()
+
+                    success_count = 0
+                    fail_count = 0
 
                     for idx, img in enumerate(images):
                         progress_text.text(f"正在處理第 {idx + 1}/{len(images)} 頁...")
 
+                        st.write(f"📄 處理頁面 {idx + 1}/{len(images)}...")
+
                         # Optimize image
-                        optimized_img = optimize_image_with_gemini(img, api_key)
+                        optimized_img = optimize_image_with_gemini(img, api_key, aspect_ratio)
+
+                        # Check if optimization actually happened
+                        if optimized_img is img:
+                            st.warning(f"⚠️ 第 {idx + 1} 頁優化失敗，使用原圖")
+                            fail_count += 1
+                        else:
+                            st.success(f"✅ 第 {idx + 1} 頁優化成功")
+                            success_count += 1
+
                         optimized_images.append(optimized_img)
 
                         # Update progress
                         progress = (idx + 1) / len(images)
                         progress_bar.progress(progress)
 
-                    progress_text.text(f"✅ 已完成 {len(optimized_images)} 頁的優化")
+                    progress_text.text(f"✅ 已完成 {len(optimized_images)} 頁的處理")
+                    status_log.info(f"成功優化: {success_count} 頁 | 失敗: {fail_count} 頁")
 
                     # Show comparison
                     st.write("優化前後對比 (第一頁):")
