@@ -209,11 +209,14 @@ def main():
         # Display file info
         st.success(f"✅ 已上傳檔案: {uploaded_file.name}")
 
-        col1, col2 = st.columns([1, 4])
+        col1, col2, col3 = st.columns([1, 1, 3])
         with col1:
-            process_button = st.button("🚀 開始處理", type="primary", width='stretch')
+            preview_button = st.button("👁️ 預覽第一頁", width='stretch', help="快速預覽優化效果，節省時間和成本")
+        with col2:
+            process_button = st.button("🚀 處理全部", type="primary", width='stretch', help="處理 PDF 的所有頁面")
 
-        if process_button:
+        if preview_button or process_button:
+            preview_mode = preview_button  # 判斷是否為預覽模式
             if not api_key:
                 st.error("⚠️ 請先在側邊欄輸入 Google Cloud API Key")
                 return
@@ -229,6 +232,8 @@ def main():
 
                 # Step 1: Convert PDF to images
                 st.markdown("---")
+                if preview_mode:
+                    st.info("🔍 預覽模式：只處理第一頁")
                 st.subheader("📑 步驟 1: 將 PDF 轉換為圖片")
                 status_1 = st.status("處理中...", expanded=True)
 
@@ -240,7 +245,14 @@ def main():
                         st.error("PDF 轉換失敗")
                         return
 
-                    st.success(f"✅ 成功轉換 {len(images)} 頁")
+                    total_pages = len(images)
+
+                    # 預覽模式只處理第一頁
+                    if preview_mode:
+                        images = [images[0]]
+                        st.success(f"✅ 成功轉換第 1 頁（PDF 共有 {total_pages} 頁）")
+                    else:
+                        st.success(f"✅ 成功轉換 {len(images)} 頁")
 
                     # Show preview of first page
                     st.write("第一頁預覽:")
@@ -299,41 +311,63 @@ def main():
 
                 status_2.update(label="✅ 圖片優化完成", state="complete")
 
-                # Step 3: Convert images back to PDF
-                st.subheader("📄 步驟 3: 重組為 PDF")
-                status_3 = st.status("處理中...", expanded=True)
+                # Step 3: Convert images back to PDF (skip in preview mode)
+                if not preview_mode:
+                    st.subheader("📄 步驟 3: 重組為 PDF")
+                    status_3 = st.status("處理中...", expanded=True)
 
-                with status_3:
-                    st.write("正在生成 PDF...")
+                    with status_3:
+                        st.write("正在生成 PDF...")
 
-                    output_pdf_path = temp_dir_path / "optimized.pdf"
-                    success = images_to_pdf(optimized_images, str(output_pdf_path))
+                        output_pdf_path = temp_dir_path / "optimized.pdf"
+                        success = images_to_pdf(optimized_images, str(output_pdf_path))
 
-                    if not success:
-                        st.error("PDF 生成失敗")
-                        return
+                        if not success:
+                            st.error("PDF 生成失敗")
+                            return
 
-                    st.success("✅ PDF 生成成功")
+                        st.success("✅ PDF 生成成功")
 
-                status_3.update(label="✅ PDF 重組完成", state="complete")
+                    status_3.update(label="✅ PDF 重組完成", state="complete")
 
-                # Step 4: Provide download button
-                st.markdown("---")
-                st.subheader("📥 下載優化後的 PDF")
+                    # Step 4: Provide download button
+                    st.markdown("---")
+                    st.subheader("📥 下載優化後的 PDF")
 
-                with open(output_pdf_path, "rb") as f:
-                    pdf_bytes = f.read()
+                    with open(output_pdf_path, "rb") as f:
+                        pdf_bytes = f.read()
 
-                st.download_button(
-                    label="⬇️ 下載優化後的 PDF",
-                    data=pdf_bytes,
-                    file_name=f"optimized_{uploaded_file.name}",
-                    mime="application/pdf",
-                    type="primary",
-                    width='stretch'
-                )
+                    st.download_button(
+                        label="⬇️ 下載優化後的 PDF",
+                        data=pdf_bytes,
+                        file_name=f"optimized_{uploaded_file.name}",
+                        mime="application/pdf",
+                        type="primary",
+                        width='stretch'
+                    )
 
-                st.success("🎉 所有處理已完成！")
+                    st.success("🎉 所有處理已完成！")
+                else:
+                    # Preview mode: show suggestion to process all
+                    st.markdown("---")
+                    st.success("✅ 預覽完成！")
+                    st.info(f"💡 如果效果滿意，可以點擊「處理全部」按鈕來處理完整的 {total_pages} 頁 PDF")
+
+                    # Provide download button for single optimized image
+                    st.subheader("📥 下載優化後的圖片")
+
+                    # Convert optimized image to bytes
+                    img_byte_arr = io.BytesIO()
+                    optimized_images[0].save(img_byte_arr, format='PNG')
+                    img_bytes = img_byte_arr.getvalue()
+
+                    st.download_button(
+                        label="⬇️ 下載優化後的第一頁 (PNG)",
+                        data=img_bytes,
+                        file_name=f"preview_page1_{uploaded_file.name.replace('.pdf', '.png')}",
+                        mime="image/png",
+                        width='stretch'
+                    )
 
 if __name__ == "__main__":
     main()
