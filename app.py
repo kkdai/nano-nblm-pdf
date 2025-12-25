@@ -192,10 +192,15 @@ def main():
         st.markdown("#### 使用說明")
         st.markdown("""
         1. 輸入 API Key
-        2. 上傳 PDF 檔案
-        3. 點擊「開始處理」
-        4. 等待處理完成
-        5. 下載優化後的 PDF
+        2. 選擇輸出比例和解析度
+        3. 上傳 PDF 檔案
+        4. 選擇處理模式：
+           - 👁️ **預覽第一頁**：快速測試效果
+           - 🚀 **處理全部**：處理所有頁面
+        5. 等待處理完成
+        6. 下載優化後的檔案
+
+        💡 **建議**：先使用預覽模式測試效果，滿意後再處理全部頁面
         """)
 
     # File uploader
@@ -300,13 +305,17 @@ def main():
                     status_log.info(f"成功優化: {success_count} 頁 | 失敗: {fail_count} 頁")
 
                     # Show comparison
-                    st.write("優化前後對比 (第一頁):")
+                    if preview_mode:
+                        st.markdown("### 🔍 優化前後對比")
+                    else:
+                        st.write("優化前後對比 (第一頁):")
+
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.write("原始圖片")
+                        st.markdown("**原始圖片**")
                         st.image(images[0], width='stretch')
                     with col2:
-                        st.write("優化後")
+                        st.markdown("**優化後**")
                         st.image(optimized_images[0], width='stretch')
 
                 status_2.update(label="✅ 圖片優化完成", state="complete")
