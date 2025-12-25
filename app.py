@@ -9,6 +9,8 @@ import img2pdf
 import io
 import tempfile
 from pathlib import Path
+import time
+from datetime import datetime, timedelta
 
 # Page configuration
 st.set_page_config(
@@ -229,6 +231,7 @@ def main():
             # Create temporary directory for processing
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_dir_path = Path(temp_dir)
+                overall_start_time = time.time()  # 記錄總體開始時間
 
                 # Save uploaded PDF
                 pdf_path = temp_dir_path / "input.pdf"
@@ -243,6 +246,7 @@ def main():
                 status_1 = st.status("處理中...", expanded=True)
 
                 with status_1:
+                    step1_start = time.time()
                     st.write("正在轉換 PDF...")
                     images = convert_pdf_to_images(str(pdf_path), dpi=dpi)
 
@@ -251,13 +255,14 @@ def main():
                         return
 
                     total_pages = len(images)
+                    step1_elapsed = time.time() - step1_start
 
                     # 預覽模式只處理第一頁
                     if preview_mode:
                         images = [images[0]]
-                        st.success(f"✅ 成功轉換第 1 頁（PDF 共有 {total_pages} 頁）")
+                        st.success(f"✅ 成功轉換第 1 頁（PDF 共有 {total_pages} 頁）⏱️ 耗時 {step1_elapsed:.1f} 秒")
                     else:
-                        st.success(f"✅ 成功轉換 {len(images)} 頁")
+                        st.success(f"✅ 成功轉換 {len(images)} 頁 ⏱️ 耗時 {step1_elapsed:.1f} 秒")
 
                     # Show preview of first page
                     st.write("第一頁預覽:")
@@ -274,25 +279,53 @@ def main():
                 with status_2:
                     progress_bar = st.progress(0)
                     progress_text = st.empty()
+                    time_info = st.empty()
                     status_log = st.empty()
 
                     success_count = 0
                     fail_count = 0
+                    start_time = time.time()
+                    page_times = []
 
                     for idx, img in enumerate(images):
-                        progress_text.text(f"正在處理第 {idx + 1}/{len(images)} 頁...")
+                        page_start_time = time.time()
+
+                        # 計算預估時間
+                        if idx > 0:
+                            avg_time_per_page = (time.time() - start_time) / idx
+                            remaining_pages = len(images) - idx
+                            estimated_remaining_seconds = avg_time_per_page * remaining_pages
+                            estimated_completion = datetime.now() + timedelta(seconds=estimated_remaining_seconds)
+
+                            # 格式化時間顯示
+                            if estimated_remaining_seconds < 60:
+                                time_str = f"{int(estimated_remaining_seconds)} 秒"
+                            else:
+                                minutes = int(estimated_remaining_seconds // 60)
+                                seconds = int(estimated_remaining_seconds % 60)
+                                time_str = f"{minutes} 分 {seconds} 秒"
+
+                            progress_text.text(f"正在處理第 {idx + 1}/{len(images)} 頁...")
+                            time_info.info(f"⏱️ 預估剩餘時間: {time_str} | 預估完成時間: {estimated_completion.strftime('%H:%M:%S')}")
+                        else:
+                            progress_text.text(f"正在處理第 {idx + 1}/{len(images)} 頁...")
+                            time_info.info(f"⏱️ 正在計算預估時間...")
 
                         st.write(f"📄 處理頁面 {idx + 1}/{len(images)}...")
 
                         # Optimize image
                         optimized_img = optimize_image_with_gemini(img, api_key, aspect_ratio)
 
+                        # 記錄這一頁的處理時間
+                        page_elapsed = time.time() - page_start_time
+                        page_times.append(page_elapsed)
+
                         # Check if optimization actually happened
                         if optimized_img is img:
-                            st.warning(f"⚠️ 第 {idx + 1} 頁優化失敗，使用原圖")
+                            st.warning(f"⚠️ 第 {idx + 1} 頁優化失敗，使用原圖 (耗時 {page_elapsed:.1f} 秒)")
                             fail_count += 1
                         else:
-                            st.success(f"✅ 第 {idx + 1} 頁優化成功")
+                            st.success(f"✅ 第 {idx + 1} 頁優化成功 (耗時 {page_elapsed:.1f} 秒)")
                             success_count += 1
 
                         optimized_images.append(optimized_img)
@@ -301,7 +334,12 @@ def main():
                         progress = (idx + 1) / len(images)
                         progress_bar.progress(progress)
 
+                    # 計算總處理時間
+                    total_elapsed = time.time() - start_time
+                    avg_time = total_elapsed / len(images) if len(images) > 0 else 0
+
                     progress_text.text(f"✅ 已完成 {len(optimized_images)} 頁的處理")
+                    time_info.success(f"⏱️ 總耗時: {int(total_elapsed // 60)} 分 {int(total_elapsed % 60)} 秒 | 平均每頁: {avg_time:.1f} 秒")
                     status_log.info(f"成功優化: {success_count} 頁 | 失敗: {fail_count} 頁")
 
                     # Show comparison
@@ -326,6 +364,7 @@ def main():
                     status_3 = st.status("處理中...", expanded=True)
 
                     with status_3:
+                        step3_start = time.time()
                         st.write("正在生成 PDF...")
 
                         output_pdf_path = temp_dir_path / "optimized.pdf"
@@ -335,7 +374,8 @@ def main():
                             st.error("PDF 生成失敗")
                             return
 
-                        st.success("✅ PDF 生成成功")
+                        step3_elapsed = time.time() - step3_start
+                        st.success(f"✅ PDF 生成成功 ⏱️ 耗時 {step3_elapsed:.1f} 秒")
 
                     status_3.update(label="✅ PDF 重組完成", state="complete")
 
@@ -355,11 +395,32 @@ def main():
                         width='stretch'
                     )
 
+                    # 顯示總耗時摘要
+                    overall_elapsed = time.time() - overall_start_time
                     st.success("🎉 所有處理已完成！")
+                    st.info(f"""
+                    ⏱️ **處理時間摘要**：
+                    - 📑 PDF 轉圖片：{step1_elapsed:.1f} 秒
+                    - 🤖 AI 優化：{total_elapsed:.1f} 秒（平均每頁 {avg_time:.1f} 秒）
+                    - 📄 重組 PDF：{step3_elapsed:.1f} 秒
+                    - ⏰ **總耗時**：{int(overall_elapsed // 60)} 分 {int(overall_elapsed % 60)} 秒
+                    """)
                 else:
                     # Preview mode: show suggestion to process all
                     st.markdown("---")
+                    overall_elapsed = time.time() - overall_start_time
                     st.success("✅ 預覽完成！")
+
+                    # 顯示預覽模式的時間摘要
+                    st.info(f"""
+                    ⏱️ **處理時間摘要**：
+                    - 📑 PDF 轉圖片：{step1_elapsed:.1f} 秒
+                    - 🤖 AI 優化第一頁：{total_elapsed:.1f} 秒
+                    - ⏰ **總耗時**：{int(overall_elapsed // 60)} 分 {int(overall_elapsed % 60)} 秒
+
+                    💡 預估處理全部 {total_pages} 頁約需：{int((avg_time * total_pages + step1_elapsed) // 60)} 分 {int((avg_time * total_pages + step1_elapsed) % 60)} 秒
+                    """)
+
                     st.info(f"💡 如果效果滿意，可以點擊「處理全部」按鈕來處理完整的 {total_pages} 頁 PDF")
 
                     # Provide download button for single optimized image
